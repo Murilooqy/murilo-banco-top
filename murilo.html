@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full bg-slate-950">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Caixa Eletrônico - ATM Digital</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Custom Tailwind Configuration -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eefbfb',
+                            100: '#d5f7f6',
+                            400: '#22d3ee',
+                            500: '#06b6d4',
+                            600: '#0891b2',
+                            900: '#164e63',
+                        },
+                        note100: '#0284c7', // Azul cyan
+                        note50: '#d97706',  // Laranja/Marrom
+                        note20: '#ca8a04',  // Amarelo
+                        note10: '#dc2626',  // Vermelho
+                        note5: '#9333ea',   // Roxo
+                        note2: '#2563eb',   // Azul escuro
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    animation: {
+                        'dispense': 'dispenseNote 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
+                        'pulse-glow': 'pulseGlow 2s infinite',
+                    },
+                    keyframes: {
+                        dispenseNote: {
+                            '0%': { transform: 'translateY(-40px) scale(0.8)', opacity: '0' },
+                            '100%': { transform: 'translateY(0) scale(1)', opacity: '1' },
+                        },
+                        pulseGlow: {
+                            '0%, 100%': { boxShadow: '0 0 15px rgba(6, 182, 212, 0.3)' },
+                            '50%': { boxShadow: '0 0 30px rgba(6, 182, 212, 0.7)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #334155;
+        }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .neon-border {
+            border: 1px solid rgba(6, 182, 212, 0.4);
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.15);
+        }
+    </style>
+</head>
+<body class="h-full bg-slate-950 text-slate-100 font-sans antialiased flex flex-col justify-between min-h-screen selection:bg-cyan-500 selection:text-slate-950">
+
+    <header class="w-full border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="p-2 bg-gradient-to-tr from-cyan-600 to-blue-600 rounded-xl shadow-lg shadow-cyan-500/20">
+                    <i data-lucide="landmark" class="w-6 h-6 text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">NEXUS BANK</h1>
+                    <p class="text-xs text-slate-400 font-mono">Caixa Eletrônico v2.4</p>
+                </div>
+            </div>
+
+            <!-- ATM Status Indicator -->
+            <div class="flex items-center space-x-4">
+                <div class="hidden sm:flex items-center space-x-2 bg-slate-800/80 px-3 py-1.5 rounded-full border border-slate-700/60">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span class="text-xs text-slate-300 font-medium">Terminal Online</span>
+                </div>
+                <button id="soundToggle" onclick="toggleSound()" class="p-2 text-slate-400 hover:text-cyan-400 hover:bg-slate-800 rounded-lg transition-all" title="Alternar Som">
+                    <i data-lucide="volume-2" id="soundIcon" class="w-5 h-5"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col lg:flex-row gap-6 justify-center items-stretch">
+
+        <!-- LEFT COLUMN: Account & Operations Panel -->
+        <section class="lg:w-1/2 flex flex-col gap-6">
+
+            <!-- Card: Account Balance Display -->
+            <div class="glass-panel rounded-2xl p-6 relative overflow-hidden neon-border">
+                <div class="absolute -right-10 -bottom-10 w-40 h-40 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                
+                <div class="flex justify-between items-start mb-4">
+                    <div>
+                        <span class="text-xs uppercase font-mono tracking-wider text-slate-400">Saldo Disponível</span>
+                        <div class="text-3xl sm:text-4xl font-extrabold font-mono text-white mt-1 tracking-tight" id="balanceDisplay">
+                            R$ 2.500,00
+                        </div>
+                    </div>
+                    <button onclick="depositModal()" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-cyan-500/30 rounded-lg transition-all flex items-center gap-1.5 active:scale-95">
+                        <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                        Depósito Fast
+                    </button>
+                </div>
+
+                <!-- User Card Mini Info -->
+                <div class="pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400 font-mono">
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="credit-card" class="w-4 h-4 text-cyan-400"></i>
+                        <span>Cliente Premium •••• 8842</span>
+                    </div>
+                    <span class="text-emerald-400 font-medium">Limite Diário: R$ 5.000</span>
+                </div>
+            </div>
+
+            <!-- Card: Withdrawal Form & Quick Values -->
+            <div class="glass-panel rounded-2xl p-6 flex-grow flex flex-col justify-between">
+                <div>
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-lg font-semibold text-slate-200 flex items-center gap-2">
+                            <i data-lucide="arrow-down-circle" class="w-5 h-5 text-cyan-400"></i>
+                            Solicitar Saque
+                        </h2>
+                        <span class="text-xs text-slate-400">Notas: R$100, 50, 20, 10, 5, 2</span>
+                    </div>
+
+                    <!-- Input Display -->
+                    <div class="relative mb-5">
+                        <label for="withdrawAmount" class="block text-xs font-mono text-slate-400 mb-1.5">VALOR DESEJADO (R$)</label>
+                        <div class="relative flex items-center">
+                            <span class="absolute left-4 text-slate-400 font-mono font-bold text-xl">R$</span>
+                            <input 
+                                type="number" 
+                                id="withdrawAmount" 
+                                placeholder="0" 
+                                min="2"
+                                step="1"
+                                class="w-full bg-slate-900 border-2 border-slate-700 focus:border-cyan-500 rounded-xl py-3.5 pl-14 pr-12 text-2xl font-mono font-bold text-cyan-300 placeholder-slate-600 outline-none transition-all shadow-inner"
+                                oninput="validateInputRealTime()"
+                            >
+                            <button onclick="clearInput()" class="absolute right-3 p-2 text-slate-500 hover:text-slate-300 transition-colors" title="Limpar">
+                                <i data-lucide="x-circle" class="w-5 h-5"></i>
+                            </button>
+                        </div>
+                        <p id="inputError" class="text-rose-400 text-xs font-medium mt-1.5 hidden flex items-center gap-1">
+                            <i data-lucide="alert-triangle" class="w-3.5 h-3.5 flex-shrink-0"></i>
+                            <span id="errorMessage">Valor inválido</span>
+                        </p>
+                    </div>
+
+                    <!-- Quick Shortcuts -->
+                    <div class="mb-6">
+                        <label class="block text-xs font-mono text-slate-400 mb-2">SAQUE RÁPIDO</label>
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            <button onclick="setQuickAmount(50)" class="py-2.5 px-3 bg-slate-800/80 hover:bg-cyan-950/60 hover:border-cyan-500/50 border border-slate-700/60 rounded-xl font-mono font-semibold text-slate-200 hover:text-cyan-400 transition-all text-sm active:scale-95">R$ 50</button>
+                            <button onclick="setQuickAmount(100)" class="py-2.5 px-3 bg-slate-800/80 hover:bg-cyan-950/60 hover:border-cyan-500/50 border border-slate-700/60 rounded-xl font-mono font-semibold text-slate-200 hover:text-cyan-400 transition-all text-sm active:scale-95">R$ 100</button>
+                            <button onclick="setQuickAmount(200)" class="py-2.5 px-3 bg-slate-800/80 hover:bg-cyan-950/60 hover:border-cyan-500/50 border border-slate-700/60 rounded-xl font-mono font-semibold text-slate-200 hover:text-cyan-400 transition-all text-sm active:scale-95">R$ 200</button>
+                            <button onclick="setQuickAmount(500)" class="py-2.5 px-3 bg-slate-800/80 hover:bg-cyan-950/60 hover:border-cyan-500/50 border border-slate-700/60 rounded-xl font-mono font-semibold text-slate-200 hover:text-cyan-400 transition-all text-sm active:scale-95">R$ 500</button>
+                        </div>
+                    </div>
+
+                    <!-- Numeric Keypad -->
+                    <div class="mb-6">
+                        <div class="grid grid-cols-3 gap-2 max-w-xs mx-auto">
+                            <button onclick="pressKey('1')" class="py-3 bg-slate-900/90 hover:bg-slate-800 active:bg-cyan-950 text-slate-200 font-mono text-lg font-bold rounded-xl border border-slate-800 hover:border-slate-700 transition-all shadow">1</button>
+                            <button onclick="pressKey('2')" class="py-3 bg-slate-900/90 hover:bg-slate-800 active:bg-cyan-950 text-slate-200 font-mono text-lg font-bold rounded-xl border border-slate-800 hover:border-slate-700 transition-all shadow">2</button>
+                            <button onclick="pressKey('3')" class="py-3 bg-slate-900/90 hover:bg-slate-800 active:bg-cyan-950 text-slate-200 font-mono text-lg font-bold rounded-xl border border-slate-800 hover:border-slate-700 transition-all shadow">3</button>
+                            <button onclick="pressKey('4')" class="py-3 bg-slate-900/90 hover:bg-slate-800 active:bg-cyan-950 text-slate-200 font-mono text-lg font-bold rounded-xl border border-slate-800 hover:border-slate-700 transition-all shadow">4</button>
+                            <button onclick="pressKey('5')" class="py-3 bg-slate-900/90 hover:bg-slate-800 active:bg-cyan-950 text-slate-200 font-mono text-lg font-bold rounded-xl border border-slate-800 hover:border-slate-700 transition-all shadow">5</button>
+                            <button onclick="pressKey('6')" class="py-3 bg-slate-900/90 hover:bg-slate-800 active:bg-cyan-950 text-slate-200 font-mono text-lg font-bold rounded-xl border border-slate-800 hover:border-slate-700 transition-all shadow">6</button>
+                            <button onclick="pressKey('7')" class="py-3 bg-slate-900/90 hover:bg-slate-800 active:bg-cyan-950 text-slate-200 font-mono text-lg font-bold rounded-xl border border-slate-800 hover:border-slate-700 transition-all shadow">7</button>
+                            <button onclick="pressKey('8')" class="py-3 bg-slate-900/90 hover:bg-slate-800 active:bg-cyan-950 text-slate-200 font-mono text-lg font-bold rounded-xl border border-slate-800 hover:border-slate-700 transition-all shadow">8</button>
+                            <button onclick="pressKey('9')" class="py-3 bg-slate-900/90 hover:bg-slate-800 active:bg-cyan-950 text-slate-200 font-mono text-lg font-bold rounded-xl border border-slate-800 hover:border-slate-700 transition-all shadow">9</button>
+                            <button onclick="pressKey('00')" class="py-3 bg-slate-900/90 hover:bg-slate-800 active:bg-cyan-950 text-slate-300 font-mono text-sm font-bold rounded-xl border border-slate-800 hover:border-slate-700 transition-all shadow">00</button>
+                            <button onclick="pressKey('0')" class="py-3 bg-slate-900/90 hover:bg-slate-800 active:bg-cyan-950 text-slate-200 font-mono text-lg font-bold rounded-xl border border-slate-800 hover:border-slate-700 transition-all shadow">0</button>
+                            <button onclick="pressKey('DEL')" class="py-3 bg-rose-950/40 hover:bg-rose-900/60 active:bg-rose-800 text-rose-300 font-mono text-sm font-bold rounded-xl border border-rose-900/50 transition-all shadow flex items-center justify-center">
+                                <i data-lucide="delete" class="w-5 h-5"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Submit Button -->
+                <button 
+                    id="btnWithdraw"
+                    onclick="executeWithdrawal()" 
+                    class="w-full py-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 active:scale-[0.99] text-slate-950 font-extrabold text-base rounded-xl shadow-lg shadow-cyan-500/25 transition-all flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    <i data-lucide="banknote" class="w-5 h-5 transition-transform group-hover:scale-110"></i>
+                    <span>CONFIRMAR SAQUE</span>
+                </button>
+            </div>
+        </section>
+
+        <section class="lg:w-1/2 flex flex-col gap-6">
+
+            <!-- Card: Note Dispenser Display -->
+            <div class="glass-panel rounded-2xl p-6 relative flex flex-col min-h-[320px] justify-between">
+                <div>
+                    <div class="flex items-center justify-between mb-4 border-b border-slate-800 pb-3">
+                        <h2 class="text-lg font-semibold text-slate-200 flex items-center gap-2">
+                            <i data-lucide="layers" class="w-5 h-5 text-cyan-400"></i>
+                            Cédulas Entregues
+                        </h2>
+                        <span id="dispenseStatus" class="text-xs font-mono px-2.5 py-1 bg-slate-800 text-slate-400 rounded-md border border-slate-700">
+                            Aguardando operação...
+                        </span>
+                    </div>
+
+                    <!-- ATM Slot Simulation Graphic -->
+                    <div class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 mb-4 text-center relative overflow-hidden">
+                        <div class="w-3/4 h-2 bg-gradient-to-r from-cyan-500/30 via-cyan-400 to-cyan-500/30 mx-auto rounded-full shadow-[0_0_10px_rgba(6,182,212,0.8)] mb-1"></div>
+                        <span class="text-[10px] font-mono text-slate-500 tracking-widest uppercase">Saída de Cédulas</span>
+                    </div>
+
+                    <!-- Dispensed Notes Grid/Container -->
+                    <div id="notesContainer" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        <!-- Placeholder State -->
+                        <div class="col-span-full py-12 text-center text-slate-500 flex flex-col items-center justify-center gap-2">
+                            <i data-lucide="wallet" class="w-10 h-10 text-slate-700 stroke-1"></i>
+                            <p class="text-sm">As notas calculadas aparecerão aqui.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Total Dispensed Footer Summary -->
+                <div id="dispenseSummary" class="mt-4 pt-3 border-t border-slate-800 flex justify-between items-center text-xs font-mono text-slate-400 hidden">
+                    <span>Total Entregue:</span>
+                    <span id="dispensedTotalValue" class="text-base font-bold text-emerald-400">R$ 0,00</span>
+                </div>
+            </div>
+
+            <!-- Card: Transaction History -->
+            <div class="glass-panel rounded-2xl p-6 flex-grow flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-base font-semibold text-slate-200 flex items-center gap-2">
+                            <i data-lucide="history" class="w-4 h-4 text-cyan-400"></i>
+                            Histórico da Sessão
+                        </h2>
+                        <button onclick="clearHistory()" class="text-xs text-slate-500 hover:text-rose-400 transition-colors">
+                            Limpar Histórico
+                        </button>
+                    </div>
+
+                    <div id="historyList" class="space-y-2.5 max-h-[220px] overflow-y-auto pr-1">
+                        <!-- Empty History Placeholder -->
+                        <p class="text-xs text-slate-500 text-center py-6 italic">Nenhuma transação efetuada nesta sessão.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div id="depositModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
+            <button onclick="closeDepositModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+            <div class="flex items-center gap-3 mb-4">
+                <div class="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20">
+                    <i data-lucide="plus-circle" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h3 class="text-lg font-bold text-white">Adicionar Saldo</h3>
+                    <p class="text-xs text-slate-400">Simule um depósito imediato na conta</p>
+                </div>
+            </div>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-mono text-slate-400 mb-1">VALOR DO DEPÓSITO (R$)</label>
+                    <input 
+                        type="number" 
+                        id="depositAmount" 
+                        placeholder="Ex: 500" 
+                        class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-lg font-mono text-emerald-400 outline-none focus:border-emerald-500"
+                    >
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="setDepositQuick(100)" class="flex-1 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-mono">+100</button>
+                    <button onclick="setDepositQuick(500)" class="flex-1 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-mono">+500</button>
+                    <button onclick="setDepositQuick(1000)" class="flex-1 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-mono">+1000</button>
+                </div>
+                <button onclick="confirmDeposit()" class="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl transition-all">
+                    Confirmar Depósito
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <footer class="border-t border-slate-900 bg-slate-950 py-4 text-center text-xs text-slate-600 font-mono">
+        <p>Nexus Bank ATM Simulator • Cédulas: R$ 100, 50, 20, 10, 5, 2 • 100% Responsivo</p>
+    </footer>
+
+    <script>
+        // State Variables
+        let currentBalance = 2500.00;
+        let soundEnabled = true;
+        let transactionHistory = [];
+
+        // Audio Synthesis Context (Web Audio API for realistic sound effects)
+        let audioCtx = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        // Sound Generators
+        function playKeySound() {
+            if (!soundEnabled) return;
+            initAudio();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.05);
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.05);
+        }
+
+        function playErrorSound() {
+            if (!soundEnabled) return;
+            initAudio();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+            osc.frequency.setValueAtTime(100, audioCtx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.25);
+        }
+
+        function playDispenseSound(duration = 1.0) {
+            if (!soundEnabled) return;
+            initAudio();
+            // Simulate mechanical counting noise
+            const bufferSize = audioCtx.sampleRate * duration;
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+
+            const noise = audioCtx.createBufferSource();
+            noise.buffer = buffer;
+
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'bandpass';
+            filter.frequency.value = 800;
+            filter.Q.value = 3;
+
+            const gain = audioCtx.createGain();
+            gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+
+            noise.connect(filter);
+            filter.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            noise.start();
+        }
+
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            const soundIcon = document.getElementById('soundIcon');
+            if (soundEnabled) {
+                soundIcon.setAttribute('data-lucide', 'volume-2');
+            } else {
+                soundIcon.setAttribute('data-lucide', 'volume-x');
+            }
+            lucide.createIcons();
+        }
+
+        // Initialize Icons on load
+        window.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            updateBalanceUI();
+        });
+
+        // UI Formatter
+        function formatBRL(amount) {
+            return amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        }
+
+        function updateBalanceUI() {
+            document.getElementById('balanceDisplay').innerText = formatBRL(currentBalance);
+        }
+
+        // Input Control Functions
+        function pressKey(key) {
+            playKeySound();
+            const input = document.getElementById('withdrawAmount');
+            if (key === 'DEL') {
+                input.value = input.value.slice(0, -1);
+            } else {
+                if (input.value.length < 6) { // Prevent overly long input
+                    input.value += key;
+                }
+            }
+            validateInputRealTime();
+        }
+
+        function clearInput() {
+            playKeySound();
+            document.getElementById('withdrawAmount').value = '';
+            hideError();
+        }
+
+        function setQuickAmount(val) {
+            playKeySound();
+            document.getElementById('withdrawAmount').value = val;
+            validateInputRealTime();
+        }
+
+        // Error Handling
+        function showError(msg) {
+            const errorElem = document.getElementById('inputError');
+            const msgElem = document.getElementById('errorMessage');
+            msgElem.innerText = msg;
+            errorElem.classList.remove('hidden');
+            playErrorSound();
+        }
+
+        function hideError() {
+            document.getElementById('inputError').classList.add('hidden');
+        }
+
+        function validateInputRealTime() {
+            const inputVal = document.getElementById('withdrawAmount').value;
+            if (!inputVal) {
+                hideError();
+                return true;
+            }
+
+            const amount = parseInt(inputVal, 10);
+
+            if (isNaN(amount) || amount <= 0) {
+                showError('Digite um valor maior que R$ 0.');
+                return false;
+            }
+
+            if (amount > currentBalance) {
+                showError(`Saldo insuficiente. Saldo disponível: ${formatBRL(currentBalance)}`);
+                return false;
+            }
+
+            // Test if notes can fulfill this value
+            const calc = calculateNotes(amount);
+            if (!calc.success) {
+                showError(calc.reason);
+                return false;
+            }
+
+            hideError();
+            return true;
+        }
+
+        /**
+         * Available notes: 100, 50, 20, 10, 5, 2
+         * Note that 1 and 3 are impossible.
+         * Values like 6, 8, 11, 13 etc. require strategic combinations with R$ 5 or R$ 2.
+         */
+        function calculateNotes(amount) {
+            if (amount < 2 || amount === 3) {
+                return {
+                    success: false,
+                    reason: `Não é possível sacar R$ ${amount},00 com as cédulas disponíveis (R$ 100, 50, 20, 10, 5, 2).`
+                };
+            }
+
+            const denominations = [100, 50, 20, 10, 5, 2];
+            let remaining = amount;
+            const result = {};
+
+            denominations.forEach(d => result[d] = 0);
+
+            // Algoritmo para garantir o menor número de notas com suporte aos ímpares (ex: valores terminados em 1, 3 ou ajustáveis por 5 e 2)
+            for (let i = 0; i < denominations.length; i++) {
+                const coin = denominations[i];
+
+                if (remaining >= coin) {
+                    let count = Math.floor(remaining / coin);
+                    let tempRemaining = remaining - (count * coin);
+
+                    // Se a sobra for 1 ou 3, precisamos recalcular para ajustar usando notas de 2 e 5
+                    if (tempRemaining === 1 || tempRemaining === 3) {
+                        if (count > 0) {
+                            count -= 1; // Devolve uma nota do valor atual para cobrir o valor restante
+                            tempRemaining += coin;
+                        }
+                    }
+
+                    result[coin] = count;
+                    remaining = tempRemaining;
+                }
+            }
+
+            // Fallback: Se ainda restar valor e não zerou, tentar resolução com notas de 2 e 5 especificamente
+            if (remaining > 0) {
+                // Tenta compensação ajustando a nota de 5
+                if (remaining % 2 !== 0 && result[5] > 0) {
+                    result[5] -= 1;
+                    remaining += 5;
+                }
+                
+                const count2 = Math.floor(remaining / 2);
+                result[2] += count2;
+                remaining -= (count2 * 2);
+            }
+
+            if (remaining !== 0) {
+                return {
+                    success: false,
+                    reason: `Não é possível formar o valor R$ ${amount},00 com a combinação de notas disponíveis.`
+                };
+            }
+
+            return {
+                success: true,
+                notes: result
+            };
+        }
+
+        function executeWithdrawal() {
+            const inputVal = document.getElementById('withdrawAmount').value;
+            const amount = parseInt(inputVal, 10);
+
+            if (!amount || !validateInputRealTime()) {
+                playErrorSound();
+                return;
+            }
+
+            const result = calculateNotes(amount);
+            if (!result.success) {
+                showError(result.reason);
+                return;
+            }
+
+            // Disable button during dispensing animation
+            const btn = document.getElementById('btnWithdraw');
+            btn.disabled = true;
+
+            const statusElem = document.getElementById('dispenseStatus');
+            statusElem.innerText = 'Contando cédulas...';
+            statusElem.className = 'text-xs font-mono px-2.5 py-1 bg-amber-500/10 text-amber-400 rounded-md border border-amber-500/30 animate-pulse';
+
+            // Play dispensing sound
+            playDispenseSound(1.5);
+
+            // Render Notes Output
+            setTimeout(() => {
+                // Deduct Balance
+                currentBalance -= amount;
+                updateBalanceUI();
+
+                // Render Graphic Notes
+                renderNotesUI(result.notes, amount);
+
+                // Log in History
+                addHistoryRecord(amount, result.notes);
+
+                // Reset Status
+                statusElem.innerText = 'Saque Concluído';
+                statusElem.className = 'text-xs font-mono px-2.5 py-1 bg-emerald-500/10 text-emerald-400 rounded-md border border-emerald-500/30';
+
+                // Clear input
+                document.getElementById('withdrawAmount').value = '';
+                btn.disabled = false;
+
+                lucide.createIcons();
+            }, 1200);
+        }
+
+        // Render Cards representing real paper bills
+        function renderNotesUI(notesMap, totalAmount) {
+            const container = document.getElementById('notesContainer');
+            container.innerHTML = '';
+
+            const noteStyles = {
+                100: { border: 'border-sky-500/50', bg: 'bg-gradient-to-br from-sky-950 to-slate-900', text: 'text-sky-400', badge: 'bg-sky-500/20 text-sky-300' },
+                50:  { border: 'border-amber-500/50', bg: 'bg-gradient-to-br from-amber-950 to-slate-900', text: 'text-amber-400', badge: 'bg-amber-500/20 text-amber-300' },
+                20:  { border: 'border-yellow-500/50', bg: 'bg-gradient-to-br from-yellow-950 to-slate-900', text: 'text-yellow-400', badge: 'bg-yellow-500/20 text-yellow-300' },
+                10:  { border: 'border-rose-500/50', bg: 'bg-gradient-to-br from-rose-950 to-slate-900', text: 'text-rose-400', badge: 'bg-rose-500/20 text-rose-300' },
+                5:   { border: 'border-purple-500/50', bg: 'bg-gradient-to-br from-purple-950 to-slate-900', text: 'text-purple-400', badge: 'bg-purple-500/20 text-purple-300' },
+                2:   { border: 'border-blue-500/50', bg: 'bg-gradient-to-br from-blue-950 to-slate-900', text: 'text-blue-400', badge: 'bg-blue-500/20 text-blue-300' },
+            };
+
+            let noteIndex = 0;
+
+            Object.keys(notesMap)
+                .map(Number)
+                .sort((a, b) => b - a)
+                .forEach(val => {
+                    const count = notesMap[val];
+                    if (count > 0) {
+                        const style = noteStyles[val];
+                        const card = document.createElement('div');
+                        card.className = `p-3 rounded-xl border ${style.border} ${style.bg} flex flex-col justify-between shadow-lg opacity-0 animate-dispense`;
+                        card.style.animationDelay = `${noteIndex * 0.1}s`;
+
+                        card.innerHTML = `
+                            <div class="flex justify-between items-center mb-2">
+                                <span class="font-mono font-bold text-xs ${style.text}">R$ ${val}</span>
+                                <span class="px-2 py-0.5 rounded text-[11px] font-bold font-mono ${style.badge}">${count}x</span>
+                            </div>
+                            <div class="flex items-center justify-between mt-1 pt-2 border-t border-white/5">
+                                <span class="text-[10px] text-slate-400 uppercase font-mono">Subtotal</span>
+                                <span class="text-xs font-mono font-bold text-slate-200">R$ ${val * count}</span>
+                            </div>
+                        `;
+                        container.appendChild(card);
+                        noteIndex++;
+                    }
+                });
+
+            // Show summary bar
+            const summaryElem = document.getElementById('dispenseSummary');
+            document.getElementById('dispensedTotalValue').innerText = formatBRL(totalAmount);
+            summaryElem.classList.remove('hidden');
+        }
+
+        // Session History Management
+        function addHistoryRecord(amount, notesMap) {
+            const historyList = document.getElementById('historyList');
+            
+            // Remove empty state message if present
+            if (transactionHistory.length === 0) {
+                historyList.innerHTML = '';
+            }
+
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+            // Format notes summary text
+            const notesDetails = Object.keys(notesMap)
+                .map(Number)
+                .sort((a, b) => b - a)
+                .filter(val => notesMap[val] > 0)
+                .map(val => `${notesMap[val]}x R$${val}`)
+                .join(', ');
+
+            const item = {
+                id: Date.now(),
+                time: timeStr,
+                amount: amount,
+                details: notesDetails
+            };
+
+            transactionHistory.unshift(item);
+
+            const row = document.createElement('div');
+            row.className = 'p-3 bg-slate-900/80 border border-slate-800 rounded-xl flex items-center justify-between text-xs font-mono transition-all hover:border-slate-700';
+            row.innerHTML = `
+                <div class="flex items-center gap-3">
+                    <div class="p-1.5 bg-cyan-500/10 text-cyan-400 rounded-lg">
+                        <i data-lucide="arrow-up-right" class="w-4 h-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-slate-200 font-bold">- ${formatBRL(amount)}</div>
+                        <div class="text-[10px] text-slate-400 truncate max-w-[180px] sm:max-w-[260px]">${notesDetails}</div>
+                    </div>
+                </div>
+                <span class="text-[10px] text-slate-500">${timeStr}</span>
+            `;
+
+            historyList.prepend(row);
+            lucide.createIcons();
+        }
+
+        function clearHistory() {
+            transactionHistory = [];
+            const historyList = document.getElementById('historyList');
+            historyList.innerHTML = '<p class="text-xs text-slate-500 text-center py-6 italic">Nenhuma transação efetuada nesta sessão.</p>';
+        }
+
+        // Deposit Modal Operations
+        function depositModal() {
+            playKeySound();
+            document.getElementById('depositModal').classList.remove('hidden');
+        }
+
+        function closeDepositModal() {
+            playKeySound();
+            document.getElementById('depositModal').classList.add('hidden');
+        }
+
+        function setDepositQuick(val) {
+            playKeySound();
+            document.getElementById('depositAmount').value = val;
+        }
+
+        function confirmDeposit() {
+            const val = parseFloat(document.getElementById('depositAmount').value);
+            if (isNaN(val) || val <= 0) {
+                playErrorSound();
+                return;
+            }
+
+            currentBalance += val;
+            updateBalanceUI();
+            closeDepositModal();
+
+            // Clear input
+            document.getElementById('depositAmount').value = '';
+
+            // Status message
+            const statusElem = document.getElementById('dispenseStatus');
+            statusElem.innerText = `Depósito de ${formatBRL(val)} efetuado!`;
+            statusElem.className = 'text-xs font-mono px-2.5 py-1 bg-emerald-500/10 text-emerald-400 rounded-md border border-emerald-500/30';
+        }
+    </script>
+</body>
+</html>
